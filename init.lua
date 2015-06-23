@@ -5,6 +5,10 @@
 --create a minetest.after function so that fire doesn't consume multiple nodes instantly from one node
 -- minetest/fire/init.lua
 
+--make smoke when fire is extinguished
+
+--global player_on_fire table for handling player's on fire
+
 fire = {}
 fire.chance = 0.3
 fire.top    = {-0.5,0.48,-0.5,0.5,0.48,0.5}
@@ -14,59 +18,86 @@ fire.right  = {-0.48,-0.5,-0.5,-0.48,0.5,0.5}
 fire.front  = {-0.5,-0.5,0.48,0.5,0.5,0.48}
 fire.back   = {-0.5,-0.5,-0.48,0.5,0.5,-0.48}
 
---[[
-function fire.check_state(pos)
-	local x = pos.x
-	local y = pos.y
-	local z = pos.z
-	local state = ""
-	--check for everything
-	local a = minetest.get_node({x=pos.x,y=pos.y+1,z=pos.z}).name
-	if a ~= "air" and minetest.get_node_group(a, "fire") == 0 and minetest.get_item_group(a, "flammable") ~= 0 then
-		state = state.."1"
-	else 
-		state = state.."0"
+local fire_entity = {
+	visual = "sprite",
+	textures = {"fire_entity.png"},
+	collisionbox = {0, 0, 0, 0, 0, 0},
+	host = nil, -- this is what the entity is attached to
+	host_type = nil, --player or luaentity ? 
+	in_water = false,
+	time = 0,
+}
+function fire_entity.on_step(self, dtime)
+	self.time = self.time + dtime
+	--remove it if it's not attached to anything   SERIALIZE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SS
+	if self.host == nil then
+		self.object:remove()
 	end
-	
-	local b = minetest.get_node({x=pos.x,y=pos.y-1,z=pos.z}).name
-	if b ~= "air" and minetest.get_node_group(b, "fire") == 0 and minetest.get_item_group(b, "flammable") ~= 0 then
-		state = state.."1"
-	else 
-		state = state.."0"
+	if self.host_type == "entity" then
+		--if the host is non existant then remove self
+		if self.host then
+			if not self.host:get_luaentity() then
+				self.object:remove()
+			end
+		end
+	elseif self.host_type == "player" then
+		--check for player
+		if self.host then
+			--check if player exists
+		end
 	end
-	
-	
-	
-	local c = minetest.get_node({x=pos.x+1,y=pos.y,z=pos.z}).name
-	if c ~= "air" and minetest.get_node_group(c, "fire") == 0 and minetest.get_item_group(c, "flammable") ~= 0 then
-		state = state.."1"
-	else 
-		state = state.."0"
+	--burn the item on fire
+	if self.time > 5 then
+		if self.host then
+			self.host:get_luaentity().object:remove()
+			minetest.sound_play("hiss", {
+				pos = self.object:getpos(),
+				max_hear_distance = 20,
+				gain = 1,
+			})
+			minetest.add_particlespawner({
+				amount = 50,
+				time = 1,
+				minpos = self.object:getpos(),
+				maxpos = self.object:getpos(),
+				minvel = {x=-0.5, y=0, z=-0.5},
+				maxvel = {x=0.5, y=0, z=0.5},
+				minacc = {x=0, y=1, z=0},
+				maxacc = {x=0, y=2, z=0},
+				minexptime = 1,
+				maxexptime = 1.2,
+				minsize = 1,
+				maxsize = 1,
+				collisiondetection = false,
+				vertical = false,
+				texture = "default_furnace_fire_bg.png", -- default furnace texture - should probably make my own
+			})
+			--default_furnace_fire_bg
+			self.host = nil
+		end
 	end
-	
-	local d = minetest.get_node({x=pos.x-1,y=pos.y,z=pos.z}).name
-	if d ~= "air" and minetest.get_node_group(d, "fire") == 0 and minetest.get_item_group(d, "flammable") ~= 0 then
-		state = state.."1"
-	else 
-		state = state.."0"
-	end
-	
-	local e = minetest.get_node({x=pos.x,y=pos.y,z=pos.z+1}).name
-	if e ~= "air" and minetest.get_node_group(e, "fire") == 0 and minetest.get_item_group(e, "flammable") ~= 0 then
-		state = state.."1"
-	else 
-		state = state.."0"
-	end
-	
-	local f = minetest.get_node({x=pos.x,y=pos.y,z=pos.z-1}).name
-	if f ~= "air" and minetest.get_node_group(f, "fire") == 0 and minetest.get_item_group(f, "flammable") ~= 0 then
-		state = state.."1"
-	else 
-		state = state.."0"
-	end
-	return(state)
+	local pos = self.object:getpos()
+	minetest.add_particlespawner({
+		amount = 1,
+		time = 0.1,
+		minpos = pos,
+		maxpos = pos,
+		minvel = {x=-0.5, y=1, z=-0.5},
+		maxvel = {x=0.5, y=2, z=0.5},
+		minacc = {x=0, y=0, z=0},
+		maxacc = {x=0, y=0, z=0},
+		minexptime = 1,
+		maxexptime = 1.2,
+		minsize = 1,
+		maxsize = 1,
+		collisiondetection = false,
+		vertical = false,
+		texture = "default_furnace_fire_fg.png", -- default furnace texture - should probably make my own
+	})
 end
-]]--
+
+minetest.register_entity("fire:fire_entity", fire_entity)
+
 
 
 --this is rediculous, but gets the job done for every possible state, basically binary
@@ -331,7 +362,7 @@ minetest.register_abm({
 	action = function(pos)
 		local meta = minetest.get_meta(pos)
 		local flame = meta:get_string("flame")
-		print(flame)
+
 		--only do fire functions if the fire is ready
 		if flame == "1" then
 			fire.burn(pos)
@@ -343,9 +374,45 @@ minetest.register_abm({
 				meta:set_string("flame", "1")
 			end)
 		end
-		--fire.update_surrounding_flames(pos)
+
+		--burn stuff in area
+		for _,object in ipairs(minetest.get_objects_inside_radius(pos, 1)) do
+			if not object:is_player() and object:get_luaentity() and object:get_luaentity().name == "__builtin:item" then
+				local posob = object:getpos()
+				if math.floor(posob.x + 0.5) == pos.x and math.floor(posob.y + 0.5) == pos.y and math.floor(posob.z + 0.5) == pos.z then
+					if object:get_luaentity().fire_entity == nil then
+						print("test")
+						object:get_luaentity().fire_entity = true
+						local fire_entity = minetest.add_entity(posob, "fire:fire_entity")
+						local fire_entity = fire_entity:get_luaentity().object
+						fire_entity:set_attach(object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+						fire_entity:get_luaentity().host = object
+						fire_entity:get_luaentity().host_type = "entity"
+						--object:get_luaentity().itemstring = ""
+						--object:remove()
+					end
+				end
+			--[[
+			elseif object:is_player() then
+				local posob = object:getpos()
+				if math.floor(posob.x + 0.5) == pos.x and math.floor(posob.y + 0.5) == pos.y and math.floor(posob.z + 0.5) == pos.z then
+					if object:get_luaentity().fire_entity == nil then
+						print("test")
+						object:get_luaentity().fire_entity = true
+						local fire_entity = minetest.add_entity(posob, "fire:fire_entity")
+						local fire_entity = fire_entity:get_luaentity().object
+						fire_entity:set_attach(object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+						fire_entity:get_luaentity().host = object
+						--object:get_luaentity().itemstring = ""
+						--object:remove()
+					end
+				end
+			]]--			
+			end
+		end
 	end,
 })
+
 
 --[[
 fire.D = 6
